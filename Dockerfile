@@ -1,6 +1,6 @@
 FROM php:8.2-apache
 
-# Install system dependencies
+# Install system dependencies including Python
 RUN apt-get update && apt-get install -y \
     curl \
     libpng-dev \
@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y \
     unzip \
     ffmpeg \
     wget \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
@@ -22,9 +24,8 @@ RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
 # Enable Apache modules including headers
 RUN a2enmod rewrite headers
 
-# Install yt-dlp
-RUN wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp && \
-    chmod a+rx /usr/local/bin/yt-dlp
+# Install yt-dlp via pip (proper installation)
+RUN pip3 install yt-dlp
 
 # Set working directory
 WORKDIR /var/www/html
@@ -41,9 +42,5 @@ RUN mkdir -p /var/www/html/data && \
 # Create startup script
 COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost/ || exit 1
 
 CMD ["/usr/local/bin/start.sh"]

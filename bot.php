@@ -102,7 +102,7 @@ class TelegramYouTubeBot {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 120); // Increased timeout for downloads
         
         // Handle file uploads differently
         if (isset($data['document']) && $data['document'] instanceof CURLFile) {
@@ -129,9 +129,15 @@ class TelegramYouTubeBot {
     }
     
     public function downloadYouTube($url, $format = 'video') {
-        $videoId = $this->extractVideoId($url);
+        // Clean the URL first
+        $cleanUrl = $this->cleanYouTubeUrl($url);
+        if (!$cleanUrl) {
+            throw new Exception("Invalid YouTube URL: $url");
+        }
+        
+        $videoId = $this->extractVideoId($cleanUrl);
         if (!$videoId) {
-            throw new Exception("Invalid YouTube URL");
+            throw new Exception("Could not extract video ID from: $cleanUrl");
         }
         
         $tempFile = $this->downloadDir . '/' . $videoId . '.' . ($format === 'audio' ? 'mp3' : 'mp4');
@@ -139,18 +145,23 @@ class TelegramYouTubeBot {
         // Check if yt-dlp is available
         $ytdlpCheck = shell_exec('which yt-dlp');
         if (empty($ytdlpCheck)) {
-            throw new Exception("yt-dlp not found. Please install it in the Dockerfile.");
+            // Try with python3 -m yt_dlp
+            $ytdlpCheck = shell_exec('which python3');
+            if (empty($ytdlpCheck)) {
+                throw new Exception("Python3 not found. Please check Dockerfile installation.");
+            }
         }
         
-        $cmd = "yt-dlp -o " . escapeshellarg($tempFile);
+        // Use python3 -m yt_dlp to ensure we're using the pip-installed version
+        $cmd = "python3 -m yt_dlp -o " . escapeshellarg($tempFile);
         
         if ($format === 'audio') {
-            $cmd .= " -x --audio-format mp3 --audio-quality 0";
+            $cmd .= " -x --audio-format mp3 --audio-quality 192k";
         } else {
-            $cmd .= " -f best[ext=mp4]";
+            $cmd .= " -f best[height<=720][ext=mp4]"; // Limit to 720p for smaller files
         }
         
-        $cmd .= " " . escapeshellarg($url);
+        $cmd .= " " . escapeshellarg($cleanUrl);
         $cmd .= " 2>&1";
         
         $this->log("Executing: $cmd");
@@ -164,17 +175,52 @@ class TelegramYouTubeBot {
             // Try to find any recently created files in download directory
             $allFiles = glob($this->downloadDir . '/*');
             $recentFiles = array_filter($allFiles, function($file) {
-                return filectime($file) > (time() - 60); // Files created in last 60 seconds
+                return filectime($file) > (time() - 120); // Files created in last 120 seconds
             });
             
             if (!empty($recentFiles)) {
-                return $recentFiles[0];
+                return current($recentFiles);
             }
             
-            throw new Exception("Download failed - no file created. Output: " . $output);
+            throw new Exception("Download failed. Output: " . $output);
         }
         
         return $files[0];
+    }
+    
+    private function cleanYouTubeUrl($url) {
+        // Remove tracking parameters and clean the URL
+        $parsed = parse_url($url);
+        if (!$parsed || !isset($parsed['host'])) {
+            return false;
+        }
+        
+        $host = strtolower($parsed['host']);
+        $path = $parsed['path'] ?? '';
+        $query = $parsed['query'] ?? '';
+        
+        // Check if it's a YouTube URL
+        $isYoutube = strpos($host, 'youtube.com') !== false || 
+                    strpos($host, 'youtu.be') !== false ||
+                    strpos($host, 'www.youtube.com') !== false;
+        
+        if (!$isYoutube) {
+            return false;
+        }
+        
+        // Handle youtu.be short URLs
+        if (strpos($host, 'youtu.be') !== false) {
+            $videoId = ltrim($path, '/');
+            return "https://www.youtube.com/watch?v=" . $videoId;
+        }
+        
+        // For regular YouTube URLs, keep only the v parameter
+        parse_str($query, $params);
+        if (isset($params['v'])) {
+            return "https://www.youtube.com/watch?v=" . $params['v'];
+        }
+        
+        return $url;
     }
     
     private function extractVideoId($url) {
@@ -219,7 +265,7 @@ class TelegramYouTubeBot {
                 "🎉 <b>Welcome to YouTube Downloader Bot!</b>\n\n" .
                 "Send me any YouTube link and I'll download it for you.\n\n" .
                 "Supported formats:\n" .
-                "🎥 <b>Video</b> - MP4 format\n" .
+                "🎥 <b>Video</b> - MP4 format (up to 720p)\n" .
                 "🎧 <b>Audio</b> - MP3 format\n\n" .
                 "Just paste a YouTube URL and choose your preferred format!"
             );
@@ -257,10 +303,10 @@ class TelegramYouTubeBot {
             return;
         }
         
-        $url = file_get_contents($urlFile);
+        $url = trim(file_get_contents($urlFile));
         @unlink($urlFile); // Clean up
         
-        $this->editMessageText($chatId, $messageId, "⏳ Downloading... This may take a few minutes...");
+        $this->editMessageText($chatId, $messageId, "⏳ Downloading... This may take 1-2 minutes...");
         
         try {
             $filePath = $this->downloadYouTube($url, $data);
@@ -290,7 +336,11 @@ class TelegramYouTubeBot {
             
         } catch (Exception $e) {
             $this->log("Download error: " . $e->getMessage());
-            $this->editMessageText($chatId, $messageId, "❌ Download failed: " . $e->getMessage());
+            $errorMessage = "❌ Download failed: " . $e->getMessage();
+            if (strlen($errorMessage) > 200) {
+                $errorMessage = substr($errorMessage, 0, 197) . "...";
+            }
+            $this->editMessageText($chatId, $messageId, $errorMessage);
         }
     }
     
@@ -337,16 +387,13 @@ class TelegramYouTubeBot {
     }
 }
 
-// Main execution with better error handling
+// Main execution
 $botToken = getenv('BOT_TOKEN');
 
 if (empty($botToken)) {
     // Try to get from other sources
     $botToken = $_ENV['BOT_TOKEN'] ?? $_SERVER['BOT_TOKEN'] ?? '8507471476:AAHkLlfP4uZ8DwNsoffhDPQsfh61QoX9aZc';
 }
-
-// Log the token for debugging (first few chars only)
-error_log("Bot token: " . substr($botToken, 0, 10) . "...");
 
 if (empty($botToken)) {
     die("❌ ERROR: BOT_TOKEN environment variable is not set\n");

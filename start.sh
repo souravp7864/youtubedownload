@@ -10,13 +10,21 @@ if [ -z "$BOT_TOKEN" ]; then
     exit 1
 fi
 
-# Check if it's the example token (basic check)
-if [ "$BOT_TOKEN" = "8507471476:AAHkLlfP4uZ8DwNsoffhDPQsfh61QoX9aZc" ]; then
-    echo "⚠️ WARNING: Using example BOT_TOKEN - please set your actual bot token"
-    echo "⚠️ Continuing with example token for testing..."
+echo "🔧 Checking dependencies..."
+# Check if Python and yt-dlp are available
+if ! command -v python3 &> /dev/null; then
+    echo "❌ Python3 not found"
+    exit 1
 fi
 
-echo "✅ Starting Telegram Bot with token: ${BOT_TOKEN:0:10}..."
+if ! python3 -c "import yt_dlp" &> /dev/null; then
+    echo "❌ yt-dlp not found in Python path"
+    exit 1
+fi
+
+echo "✅ Dependencies check passed"
+
+echo "🤖 Starting Telegram Bot with token: ${BOT_TOKEN:0:10}..."
 
 # Start the Telegram bot in background
 cd /var/www/html
