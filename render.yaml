@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: telegram-youtube-bot
+    env: docker
+    plan: free
+    docker:
+      dockerfile: Dockerfile
+    envVars:
+      - key: BOT_TOKEN
+        value: your_actual_bot_token_here

@@ -300,6 +300,16 @@ class TelegramYouTubeBot {
         $this->log("🤖 Starting Telegram Bot in polling mode...");
         $this->log("Bot Token: " . substr($this->token, 0, 10) . "...");
         
+        // Test the token first
+        $test = $this->apiRequest('getMe', []);
+        if (!$test || !isset($test['result'])) {
+            $this->log("❌ Invalid BOT_TOKEN or Telegram API error: " . json_encode($test));
+            $this->log("❌ Please check your BOT_TOKEN environment variable");
+            return;
+        }
+        
+        $this->log("✅ Bot authenticated successfully: @" . $test['result']['username']);
+        
         while (true) {
             try {
                 $updates = $this->apiRequest('getUpdates', [
@@ -327,11 +337,19 @@ class TelegramYouTubeBot {
     }
 }
 
-// Main execution
-$botToken = getenv('BOT_TOKEN') ?: '8507471476:AAHkLlfP4uZ8DwNsoffhDPQsfh61QoX9aZc';
+// Main execution with better error handling
+$botToken = getenv('BOT_TOKEN');
 
-if (empty($botToken) || $botToken === '8507471476:AAHkLlfP4uZ8DwNsoffhDPQsfh61QoX9aZc') {
-    die("❌ ERROR: Please set BOT_TOKEN environment variable with your actual bot token\n");
+if (empty($botToken)) {
+    // Try to get from other sources
+    $botToken = $_ENV['BOT_TOKEN'] ?? $_SERVER['BOT_TOKEN'] ?? '8507471476:AAHkLlfP4uZ8DwNsoffhDPQsfh61QoX9aZc';
+}
+
+// Log the token for debugging (first few chars only)
+error_log("Bot token: " . substr($botToken, 0, 10) . "...");
+
+if (empty($botToken)) {
+    die("❌ ERROR: BOT_TOKEN environment variable is not set\n");
 }
 
 $bot = new TelegramYouTubeBot($botToken);

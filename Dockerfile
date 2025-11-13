@@ -42,4 +42,8 @@ RUN mkdir -p /var/www/html/data && \
 COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/ || exit 1
+
 CMD ["/usr/local/bin/start.sh"]
