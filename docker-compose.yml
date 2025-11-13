@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "80:80"
+    volumes:
+      - ./data:/var/www/html/data
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+    restart: unless-stopped
+    volumes:
+      - bot_data:/var/www/html/data
+
+volumes:
+  bot_data:
