@@ -5,8 +5,6 @@ services:
     build: .
     ports:
       - "80:80"
-    volumes:
-      - ./data:/var/www/html/data
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
     restart: unless-stopped

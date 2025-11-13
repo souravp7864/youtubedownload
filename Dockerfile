@@ -7,21 +7,18 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
+    libzip-dev \
     zip \
     unzip \
-    python3 \
-    python3-pip \
     ffmpeg \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-install mbstring exif pcntl bcmath gd
+RUN docker-php-ext-install mbstring exif pcntl bcmath gd zip
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-# Install Python dependencies for yt-dlp
-RUN pip3 install yt-dlp
 
 # Set working directory
 WORKDIR /var/www/html
@@ -46,11 +43,4 @@ RUN mkdir -p /var/www/html/data && \
 RUN a2enmod rewrite
 COPY .htaccess .htaccess
 
-# Create startup script
-COPY start.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/start.sh
-
-# Create data directory for persistent storage
-VOLUME /var/www/html/data
-
-CMD ["/usr/local/bin/start.sh"]
+CMD ["apache2-foreground"]

@@ -1,9 +1,12 @@
 {
-    "name": "telegram-youtube-bot",
-    "description": "Telegram YouTube Downloader Bot",
+    "name": "Youtube Downloader Bot",
+    "description": "Telegram YouTube Downloader Bot in PHP",
     "type": "project",
     "require": {
-        "php": "^8.0"
+        "php": "^8.0",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*"
     },
     "autoload": {
         "psr-4": {

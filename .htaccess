@@ -1,6 +1,10 @@
 RewriteEngine On
 
-# Redirect all requests to index.php except for existing files
+# Handle bot requests
+RewriteCond %{REQUEST_URI} ^/bot\.php [NC]
+RewriteRule ^ - [L]
+
+# Redirect all other requests to index.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [L]
