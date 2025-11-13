@@ -1,18 +1,22 @@
 RewriteEngine On
 
-# Handle bot requests
-RewriteCond %{REQUEST_URI} ^/bot\.php [NC]
-RewriteRule ^ - [L]
+# Security - disable directory browsing
+Options -Indexes
+
+# Handle bot requests directly
+RewriteRule ^bot\.php$ - [L]
 
 # Redirect all other requests to index.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [L]
 
-# Security headers
-Header always set X-Content-Type-Options nosniff
-Header always set X-Frame-Options DENY
-Header always set X-XSS-Protection "1; mode=block"
+# Basic security headers (removed mod_headers dependency)
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+    Header always set X-XSS-Protection "1; mode=block"
+</IfModule>
 
 # Prevent access to sensitive files
 <FilesMatch "\.(env|json|log|md|gitignore|gitattributes|lock)$">

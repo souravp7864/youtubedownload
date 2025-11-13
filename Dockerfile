@@ -20,6 +20,16 @@ RUN docker-php-ext-install mbstring exif pcntl bcmath gd zip
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
+# Set ServerName to fix Apache warning
+RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
+
+# Enable Apache modules including headers
+RUN a2enmod rewrite headers
+
+# Install yt-dlp
+RUN wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp && \
+    chmod a+rx /usr/local/bin/yt-dlp
+
 # Set working directory
 WORKDIR /var/www/html
 
@@ -39,8 +49,12 @@ RUN mkdir -p /var/www/html/data && \
     chmod -R 755 /var/www/html && \
     chmod -R 777 /var/www/html/data
 
-# Configure Apache
-RUN a2enmod rewrite
-COPY .htaccess .htaccess
+# Create a simple PHP script to run the bot via CLI
+RUN echo '#!/bin/bash\nphp /var/www/html/bot.php' > /usr/local/bin/run-bot && \
+    chmod +x /usr/local/bin/run-bot
 
-CMD ["apache2-foreground"]
+# Create startup script
+COPY start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
+
+CMD ["/usr/local/bin/start.sh"]

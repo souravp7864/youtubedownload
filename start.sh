@@ -1,13 +1,9 @@
 #!/bin/bash
 
-# Start Apache in the background
-apache2-foreground &
+# Start the bot in background
+echo "🤖 Starting Telegram Bot..."
+php /var/www/html/bot.php &
 
-# Wait for Apache to start
-sleep 5
-
-# Start the Telegram bot
-php /var/www/html/bot.php
-
-# Keep container running
-wait
+# Start Apache in foreground
+echo "🌐 Starting Apache Web Server..."
+exec apache2-foreground

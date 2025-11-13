@@ -105,7 +105,6 @@ class TelegramYouTubeBot {
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
         
-        // For file uploads
         if (isset($data['document'])) {
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 "Content-Type: multipart/form-data"
@@ -113,7 +112,6 @@ class TelegramYouTubeBot {
         }
         
         $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         
         if (curl_error($ch)) {
             $this->log("cURL Error: " . curl_error($ch));
@@ -132,8 +130,13 @@ class TelegramYouTubeBot {
         
         $tempFile = $this->downloadDir . '/' . $videoId . '.' . ($format === 'audio' ? 'mp3' : 'mp4');
         
-        // Use yt-dlp via shell command (included in Docker image)
-        $cmd = escapeshellcmd("yt-dlp") . " -o " . escapeshellarg($tempFile);
+        // Check if yt-dlp is available
+        $ytdlpCheck = shell_exec('which yt-dlp');
+        if (empty($ytdlpCheck)) {
+            throw new Exception("yt-dlp not found. Please install it in the Dockerfile.");
+        }
+        
+        $cmd = "yt-dlp -o " . escapeshellarg($tempFile);
         
         if ($format === 'audio') {
             $cmd .= " -x --audio-format mp3 --audio-quality 0";
@@ -149,10 +152,9 @@ class TelegramYouTubeBot {
         $output = shell_exec($cmd);
         $this->log("Download output: $output");
         
-        // Find the actual file that was created
         $files = glob($this->downloadDir . '/' . $videoId . '.*');
         if (empty($files)) {
-            throw new Exception("Download failed - no file created");
+            throw new Exception("Download failed - no file created. Output: " . $output);
         }
         
         return $files[0];
@@ -207,8 +209,8 @@ class TelegramYouTubeBot {
                 "Just paste a YouTube URL and choose your preferred format!"
             );
         } elseif (strpos($text, 'youtube.com') !== false || strpos($text, 'youtu.be') !== false) {
-            // Store URL in session (simplified)
-            $_SESSION['last_url'] = $text;
+            // Store URL in temporary file (instead of session for CLI)
+            file_put_contents($this->dataDir . "/last_url_{$chatId}.txt", $text);
             
             $keyboard = [
                 'inline_keyboard' => [
@@ -233,12 +235,15 @@ class TelegramYouTubeBot {
         
         $this->answerCallbackQuery($queryId);
         
-        // Get stored URL
-        $url = $_SESSION['last_url'] ?? '';
-        if (!$url) {
+        // Get stored URL from file
+        $urlFile = $this->dataDir . "/last_url_{$chatId}.txt";
+        if (!file_exists($urlFile)) {
             $this->editMessageText($chatId, $messageId, "❌ Error: No URL found. Please send the YouTube link again.");
             return;
         }
+        
+        $url = file_get_contents($urlFile);
+        @unlink($urlFile); // Clean up
         
         $this->editMessageText($chatId, $messageId, "⏳ Downloading... Please wait...");
         
@@ -269,44 +274,30 @@ class TelegramYouTubeBot {
         }
     }
     
-    public function run() {
-        // Start session for storing user data temporarily
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        
-        $input = file_get_contents('php://input');
-        $this->log("Raw input: " . $input);
-        
-        if ($input) {
-            $update = json_decode($input, true);
-            if ($update) {
-                $this->handleUpdate($update);
-            }
-        } else {
-            // For polling method (not recommended for web, but works)
-            $this->log("No input received - running in polling mode");
-            $this->runPolling();
-        }
-    }
-    
-    private function runPolling() {
+    public function runPolling() {
         $offset = 0;
         
+        $this->log("🤖 Starting Telegram Bot in polling mode...");
+        
         while (true) {
-            $updates = $this->apiRequest('getUpdates', [
-                'offset' => $offset,
-                'timeout' => 30
-            ]);
-            
-            if (isset($updates['result']) && is_array($updates['result'])) {
-                foreach ($updates['result'] as $update) {
-                    $offset = $update['update_id'] + 1;
-                    $this->handleUpdate($update);
+            try {
+                $updates = $this->apiRequest('getUpdates', [
+                    'offset' => $offset,
+                    'timeout' => 30
+                ]);
+                
+                if (isset($updates['result']) && is_array($updates['result'])) {
+                    foreach ($updates['result'] as $update) {
+                        $offset = $update['update_id'] + 1;
+                        $this->handleUpdate($update);
+                    }
                 }
+                
+                sleep(1);
+            } catch (Exception $e) {
+                $this->log("Polling error: " . $e->getMessage());
+                sleep(5);
             }
-            
-            sleep(1);
         }
     }
 }
@@ -320,13 +311,6 @@ if (empty($botToken) || $botToken === '8507471476:AAHkLlfP4uZ8DwNsoffhDPQsfh61Qo
 
 $bot = new TelegramYouTubeBot($botToken);
 
-// Check if running via CLI (polling) or web (webhook)
-if (php_sapi_name() === 'cli') {
-    echo "🤖 Starting Telegram Bot in polling mode...\n";
-    echo "Bot Token: " . substr($botToken, 0, 10) . "...\n";
-    $bot->run();
-} else {
-    // Webhook mode
-    $bot->run();
-}
+// Always run in polling mode for Render.com
+$bot->runPolling();
 ?>
