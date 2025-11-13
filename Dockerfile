@@ -1,6 +1,6 @@
 FROM php:8.2-apache
 
-# Install system dependencies
+# Install system dependencies including Node.js for JavaScript runtime
 RUN apt-get update && apt-get install -y \
     curl \
     libpng-dev \
@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     wget \
     python3 \
     python3-minimal \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
@@ -24,10 +26,12 @@ RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
 # Enable Apache modules including headers
 RUN a2enmod rewrite headers
 
-# Install yt-dlp as standalone binary (no pip required)
+# Install yt-dlp as standalone binary
 RUN wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp && \
-    chmod a+rx /usr/local/bin/yt-dlp && \
-    yt-dlp --version
+    chmod a+rx /usr/local/bin/yt-dlp
+
+# Install JavaScript runtime for yt-dlp
+RUN npm install -g mujs
 
 # Set working directory
 WORKDIR /var/www/html

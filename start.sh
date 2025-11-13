@@ -19,6 +19,13 @@ fi
 
 echo "✅ yt-dlp version: $(yt-dlp --version)"
 
+# Check if Node.js is available (for JavaScript runtime)
+if command -v node &> /dev/null; then
+    echo "✅ Node.js available for JavaScript runtime"
+else
+    echo "⚠️ Node.js not available - some YouTube downloads may fail"
+fi
+
 echo "🤖 Starting Telegram Bot with token: ${BOT_TOKEN:0:10}..."
 
 # Start the Telegram bot in background

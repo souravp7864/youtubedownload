@@ -147,14 +147,21 @@ class TelegramYouTubeBot {
             throw new Exception("yt-dlp not found. Please check Dockerfile installation.");
         }
         
-        // Use standalone yt-dlp binary
+        // FIXED: Use simpler format strings and add bot bypass options
         $cmd = "yt-dlp -o " . escapeshellarg($tempFile);
         
         if ($format === 'audio') {
             $cmd .= " -x --audio-format mp3 --audio-quality 192k";
         } else {
-            $cmd .= " -f best[height<=720][ext=mp4]"; // Limit to 720p for smaller files
+            // FIXED: Use simpler format selection without brackets that break shell parsing
+            $cmd .= " -f \"best[height<=720]/best[ext=mp4]/best\"";
         }
+        
+        // FIXED: Add options to bypass YouTube bot detection
+        $cmd .= " --extractor-args \"youtube:player_client=android,web\"";
+        $cmd .= " --throttled-rate 100K";
+        $cmd .= " --socket-timeout 30";
+        $cmd .= " --source-address 0.0.0.0";
         
         $cmd .= " " . escapeshellarg($cleanUrl);
         $cmd .= " 2>&1";
@@ -177,7 +184,12 @@ class TelegramYouTubeBot {
                 return current($recentFiles);
             }
             
-            throw new Exception("Download failed. Output: " . $output);
+            // Check if it's a bot detection error
+            if (strpos($output, 'bot') !== false || strpos($output, 'Sign in') !== false) {
+                throw new Exception("YouTube blocked the download (bot detection). Try again later or use a different video.");
+            }
+            
+            throw new Exception("Download failed. Output: " . substr($output, 0, 200));
         }
         
         return $files[0];
@@ -266,7 +278,7 @@ class TelegramYouTubeBot {
                 "Supported formats:\n" .
                 "🎥 <b>Video</b> - MP4 format (up to 720p)\n" .
                 "🎧 <b>Audio</b> - MP3 format\n\n" .
-                "Just paste a YouTube URL and choose your preferred format!"
+                "<i>Note: Some videos may be blocked by YouTube. If download fails, try a different video.</i>"
             );
         } elseif (strpos($text, 'youtube.com') !== false || strpos($text, 'youtu.be') !== false) {
             // Store URL in temporary file
