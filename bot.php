@@ -102,9 +102,8 @@ class TelegramYouTubeBot {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 120); // Increased timeout for downloads
+        curl_setopt($ch, CURLOPT_TIMEOUT, 120);
         
-        // Handle file uploads differently
         if (isset($data['document']) && $data['document'] instanceof CURLFile) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -145,15 +144,11 @@ class TelegramYouTubeBot {
         // Check if yt-dlp is available
         $ytdlpCheck = shell_exec('which yt-dlp');
         if (empty($ytdlpCheck)) {
-            // Try with python3 -m yt_dlp
-            $ytdlpCheck = shell_exec('which python3');
-            if (empty($ytdlpCheck)) {
-                throw new Exception("Python3 not found. Please check Dockerfile installation.");
-            }
+            throw new Exception("yt-dlp not found. Please check Dockerfile installation.");
         }
         
-        // Use python3 -m yt_dlp to ensure we're using the pip-installed version
-        $cmd = "python3 -m yt_dlp -o " . escapeshellarg($tempFile);
+        // Use standalone yt-dlp binary
+        $cmd = "yt-dlp -o " . escapeshellarg($tempFile);
         
         if ($format === 'audio') {
             $cmd .= " -x --audio-format mp3 --audio-quality 192k";
@@ -175,7 +170,7 @@ class TelegramYouTubeBot {
             // Try to find any recently created files in download directory
             $allFiles = glob($this->downloadDir . '/*');
             $recentFiles = array_filter($allFiles, function($file) {
-                return filectime($file) > (time() - 120); // Files created in last 120 seconds
+                return filectime($file) > (time() - 120);
             });
             
             if (!empty($recentFiles)) {
@@ -211,6 +206,10 @@ class TelegramYouTubeBot {
         // Handle youtu.be short URLs
         if (strpos($host, 'youtu.be') !== false) {
             $videoId = ltrim($path, '/');
+            // Remove any query parameters from short URL
+            if (strpos($videoId, '?') !== false) {
+                $videoId = substr($videoId, 0, strpos($videoId, '?'));
+            }
             return "https://www.youtube.com/watch?v=" . $videoId;
         }
         
@@ -304,7 +303,7 @@ class TelegramYouTubeBot {
         }
         
         $url = trim(file_get_contents($urlFile));
-        @unlink($urlFile); // Clean up
+        @unlink($urlFile);
         
         $this->editMessageText($chatId, $messageId, "⏳ Downloading... This may take 1-2 minutes...");
         
@@ -317,7 +316,7 @@ class TelegramYouTubeBot {
             
             $fileSize = filesize($filePath);
             
-            if ($fileSize > 50 * 1024 * 1024) { // 50MB limit
+            if ($fileSize > 50 * 1024 * 1024) {
                 unlink($filePath);
                 $this->editMessageText($chatId, $messageId, "❌ File too large (>50MB). Telegram limits file size.");
                 return;
@@ -360,6 +359,10 @@ class TelegramYouTubeBot {
         
         $this->log("✅ Bot authenticated successfully: @" . $test['result']['username']);
         
+        // Test yt-dlp installation
+        $ytdlpVersion = shell_exec('yt-dlp --version 2>&1');
+        $this->log("yt-dlp version: " . trim($ytdlpVersion));
+        
         while (true) {
             try {
                 $updates = $this->apiRequest('getUpdates', [
@@ -391,7 +394,6 @@ class TelegramYouTubeBot {
 $botToken = getenv('BOT_TOKEN');
 
 if (empty($botToken)) {
-    // Try to get from other sources
     $botToken = $_ENV['BOT_TOKEN'] ?? $_SERVER['BOT_TOKEN'] ?? '8507471476:AAHkLlfP4uZ8DwNsoffhDPQsfh61QoX9aZc';
 }
 

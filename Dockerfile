@@ -1,6 +1,6 @@
 FROM php:8.2-apache
 
-# Install system dependencies including Python
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     libpng-dev \
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     wget \
     python3 \
-    python3-pip \
+    python3-minimal \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
@@ -24,8 +24,10 @@ RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
 # Enable Apache modules including headers
 RUN a2enmod rewrite headers
 
-# Install yt-dlp via pip (proper installation)
-RUN pip3 install yt-dlp
+# Install yt-dlp as standalone binary (no pip required)
+RUN wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp && \
+    chmod a+rx /usr/local/bin/yt-dlp && \
+    yt-dlp --version
 
 # Set working directory
 WORKDIR /var/www/html
