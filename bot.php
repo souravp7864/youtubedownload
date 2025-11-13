@@ -100,14 +100,20 @@ class TelegramYouTubeBot {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
         
-        if (isset($data['document'])) {
+        // Handle file uploads differently
+        if (isset($data['document']) && $data['document'] instanceof CURLFile) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 "Content-Type: multipart/form-data"
+            ]);
+        } else {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                "Content-Type: application/x-www-form-urlencoded"
             ]);
         }
         
@@ -152,8 +158,19 @@ class TelegramYouTubeBot {
         $output = shell_exec($cmd);
         $this->log("Download output: $output");
         
+        // Look for the actual downloaded file
         $files = glob($this->downloadDir . '/' . $videoId . '.*');
         if (empty($files)) {
+            // Try to find any recently created files in download directory
+            $allFiles = glob($this->downloadDir . '/*');
+            $recentFiles = array_filter($allFiles, function($file) {
+                return filectime($file) > (time() - 60); // Files created in last 60 seconds
+            });
+            
+            if (!empty($recentFiles)) {
+                return $recentFiles[0];
+            }
+            
             throw new Exception("Download failed - no file created. Output: " . $output);
         }
         
@@ -177,8 +194,6 @@ class TelegramYouTubeBot {
     }
     
     public function handleUpdate($update) {
-        $this->log("Received update: " . json_encode($update));
-        
         if (isset($update['message'])) {
             $this->handleMessage($update['message']);
         } elseif (isset($update['callback_query'])) {
@@ -209,7 +224,7 @@ class TelegramYouTubeBot {
                 "Just paste a YouTube URL and choose your preferred format!"
             );
         } elseif (strpos($text, 'youtube.com') !== false || strpos($text, 'youtu.be') !== false) {
-            // Store URL in temporary file (instead of session for CLI)
+            // Store URL in temporary file
             file_put_contents($this->dataDir . "/last_url_{$chatId}.txt", $text);
             
             $keyboard = [
@@ -233,7 +248,7 @@ class TelegramYouTubeBot {
         $data = $callbackQuery['data'];
         $queryId = $callbackQuery['id'];
         
-        $this->answerCallbackQuery($queryId);
+        $this->answerCallbackQuery($queryId, "Processing your request...");
         
         // Get stored URL from file
         $urlFile = $this->dataDir . "/last_url_{$chatId}.txt";
@@ -245,10 +260,15 @@ class TelegramYouTubeBot {
         $url = file_get_contents($urlFile);
         @unlink($urlFile); // Clean up
         
-        $this->editMessageText($chatId, $messageId, "⏳ Downloading... Please wait...");
+        $this->editMessageText($chatId, $messageId, "⏳ Downloading... This may take a few minutes...");
         
         try {
             $filePath = $this->downloadYouTube($url, $data);
+            
+            if (!file_exists($filePath)) {
+                throw new Exception("Downloaded file not found");
+            }
+            
             $fileSize = filesize($filePath);
             
             if ($fileSize > 50 * 1024 * 1024) { // 50MB limit
@@ -278,12 +298,14 @@ class TelegramYouTubeBot {
         $offset = 0;
         
         $this->log("🤖 Starting Telegram Bot in polling mode...");
+        $this->log("Bot Token: " . substr($this->token, 0, 10) . "...");
         
         while (true) {
             try {
                 $updates = $this->apiRequest('getUpdates', [
                     'offset' => $offset,
-                    'timeout' => 30
+                    'timeout' => 30,
+                    'limit' => 100
                 ]);
                 
                 if (isset($updates['result']) && is_array($updates['result'])) {
@@ -291,6 +313,9 @@ class TelegramYouTubeBot {
                         $offset = $update['update_id'] + 1;
                         $this->handleUpdate($update);
                     }
+                } else if (isset($updates['error_code'])) {
+                    $this->log("Telegram API Error: " . $updates['description']);
+                    sleep(10);
                 }
                 
                 sleep(1);
@@ -310,7 +335,5 @@ if (empty($botToken) || $botToken === '8507471476:AAHkLlfP4uZ8DwNsoffhDPQsfh61Qo
 }
 
 $bot = new TelegramYouTubeBot($botToken);
-
-// Always run in polling mode for Render.com
 $bot->runPolling();
 ?>

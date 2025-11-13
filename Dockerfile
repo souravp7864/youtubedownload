@@ -2,7 +2,6 @@ FROM php:8.2-apache
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    git \
     curl \
     libpng-dev \
     libonig-dev \
@@ -17,9 +16,6 @@ RUN apt-get update && apt-get install -y \
 # Install PHP extensions
 RUN docker-php-ext-install mbstring exif pcntl bcmath gd zip
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
 # Set ServerName to fix Apache warning
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
 
@@ -33,25 +29,14 @@ RUN wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /us
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy composer files and install dependencies
-COPY composer.json composer.lock* ./
-RUN if [ -f composer.lock ]; then composer install --no-dev --no-scripts --no-autoloader; fi
-
 # Copy application files
 COPY . .
-
-# Run composer autoloader
-RUN if [ -f composer.lock ]; then composer dump-autoload --optimize; fi
 
 # Create and set permissions for data directory
 RUN mkdir -p /var/www/html/data && \
     chown -R www-data:www-data /var/www/html && \
     chmod -R 755 /var/www/html && \
     chmod -R 777 /var/www/html/data
-
-# Create a simple PHP script to run the bot via CLI
-RUN echo '#!/bin/bash\nphp /var/www/html/bot.php' > /usr/local/bin/run-bot && \
-    chmod +x /usr/local/bin/run-bot
 
 # Create startup script
 COPY start.sh /usr/local/bin/start.sh

@@ -1,6 +1,4 @@
 <?php
-require_once 'vendor/autoload.php';
-
 // Load environment variables
 $botToken = getenv('BOT_TOKEN') ?: '8507471476:AAHkLlfP4uZ8DwNsoffhDPQsfh61QoX9aZc';
 
@@ -14,6 +12,7 @@ echo "Bot Token: " . substr($botToken, 0, 10) . "..." . "\n";
 $dataDir = __DIR__ . '/data';
 if (!is_dir($dataDir)) {
     mkdir($dataDir, 0777, true);
+    echo "Created data directory\n";
 }
 
 if (is_writable($dataDir)) {
@@ -29,6 +28,15 @@ if (file_exists($usersFile)) {
     echo "Total users: " . count($users) . "\n";
 } else {
     echo "Total users: 0\n";
+    file_put_contents($usersFile, '{}');
+}
+
+// Check if bot is running
+echo "Bot process: " . (isBotRunning() ? "Running" : "Not running") . "\n";
+
+function isBotRunning() {
+    $output = shell_exec('ps aux | grep "php.*bot.php" | grep -v grep');
+    return !empty($output);
 }
 
 // Start bot if accessed via CLI
